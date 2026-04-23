@@ -1,30 +1,60 @@
-menuconfig ZMK_BATTERY_MONITOR_HID
-    bool "Per-peripheral battery reporting over a secondary USB HID interface"
-    depends on ZMK_SPLIT && ZMK_SPLIT_ROLE_CENTRAL && ZMK_USB
+menuconfig ZMK_BATTERY_MONITOR
+    bool "Pair with the zmk-battery-monitor companion app"
+    depends on ZMK_SPLIT
     default n
     help
-      When enabled, adds a vendor-defined USB HID interface that reports
-      each split peripheral's battery state-of-charge to the host. Pairs
-      with the zmk-battery-monitor companion app on macOS.
+      Enables per-peripheral battery reporting and (optionally) metadata
+      exchange between split peripherals and the USB-connected central.
+      Pairs with the zmk-battery-monitor macOS app.
 
-      Requires CONFIG_USB_HID_DEVICE_COUNT>=2.
+      Enable on every device in your split (central AND peripherals).
+      Subfeatures auto-select based on the ZMK split role.
 
-if ZMK_BATTERY_MONITOR_HID
+if ZMK_BATTERY_MONITOR
+
+config ZMK_BATTERY_MONITOR_HID
+    bool "Expose battery HID report over USB (central)"
+    depends on ZMK_SPLIT_ROLE_CENTRAL && ZMK_USB
+    default y
+    help
+      On the central dongle, exposes a vendor-defined USB HID interface
+      carrying per-peripheral battery levels and (once enabled)
+      per-peripheral metadata (side label, charging state).
+
+config ZMK_BATTERY_MONITOR_PERIPHERAL
+    bool "Expose per-half metadata via BLE (peripheral)"
+    depends on !ZMK_SPLIT_ROLE_CENTRAL && BT
+    default y
+    help
+      On the split peripherals, exposes a custom GATT service with
+      side-label, charging-state, and (future) voltage characteristics.
+      The central reads these to populate richer metadata in the HID
+      report sent to the host.
+
+config ZMK_BATTERY_MONITOR_SIDE_LABEL
+    string "Side label shown in the companion app"
+    depends on ZMK_BATTERY_MONITOR_PERIPHERAL
+    default ""
+    help
+      Human-readable name for this half, e.g. "Corne Left" or
+      "Sofle Right". Empty means the app falls back to "Peripheral N".
+      Set this in the shield override .conf for each half
+      (e.g. config/corne_left.conf, config/corne_right.conf).
 
 config ZMK_BATTERY_MONITOR_HID_HEARTBEAT_SEC
-    int "Heartbeat interval in seconds"
+    int "Heartbeat interval for HID report (seconds)"
+    depends on ZMK_BATTERY_MONITOR_HID
     default 60
     help
-      Interval at which the firmware resends the current battery report
-      even when no values have changed. Keeps the host informed that
-      the dongle is alive. Does not generate any BLE traffic to the
-      peripherals, so does not affect their sleep behavior.
+      How often the central resends the current report as a liveness
+      signal. Purely dongle→host USB traffic; does not touch BLE
+      and does not prevent peripheral deep sleep.
 
-module = ZMK_BATTERY_MONITOR_HID
-module-str = ZMK_BATTERY_MONITOR_HID
+module = ZMK_BATTERY_MONITOR
+module-str = ZMK_BATTERY_MONITOR
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
 
-endif # ZMK_BATTERY_MONITOR_HID
+endif # ZMK_BATTERY_MONITOR
 
 config USB_HID_DEVICE_COUNT
     default 2 if ZMK_BATTERY_MONITOR_HID

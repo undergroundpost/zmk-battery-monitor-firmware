@@ -64,7 +64,10 @@ static int push_report(void) {
 
     switch (zmk_usb_get_status()) {
     case USB_DC_SUSPEND:
-        return usb_wakeup_request();
+        // Host is asleep. Do not transmit — a report here (or a USB remote
+        // wakeup) would wake the host. The next heartbeat after resume will
+        // carry the current state.
+        return 0;
     case USB_DC_ERROR:
     case USB_DC_RESET:
     case USB_DC_DISCONNECTED:

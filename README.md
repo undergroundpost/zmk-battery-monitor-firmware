@@ -1,17 +1,18 @@
 # zmk-battery-monitor-firmware
 
-ZMK module that adds a vendor-defined USB HID interface to a split-keyboard dongle, reporting per-peripheral battery levels to the host. Pairs with [zmk-battery-monitor](https://github.com/undergroundpost/zmk-battery-monitor) on macOS.
+ZMK module that bridges a split keyboard to the [zmk-battery-monitor](https://github.com/undergroundpost/zmk-battery-monitor) macOS app.
+
+- **Central (dongle):** exposes a vendor-defined USB HID interface carrying per-peripheral battery levels and metadata.
+- **Peripherals (halves):** expose a custom GATT service with per-half side label and (coming soon) charging state.
 
 ## Requirements
 
-- A ZMK config with a dongle (central) USB peripheral, i.e. `CONFIG_ZMK_SPLIT=y`, `CONFIG_ZMK_SPLIT_ROLE_CENTRAL=y`, `CONFIG_ZMK_USB=y`.
-- Split BLE central battery fetching enabled: `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y` on the dongle, so the dongle actually knows each peripheral's level.
+- A ZMK config with a central dongle, i.e. `CONFIG_ZMK_SPLIT=y` + `CONFIG_ZMK_SPLIT_ROLE_CENTRAL=y` + `CONFIG_ZMK_USB=y` on the dongle.
+- Split BLE central battery fetching enabled: `CONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_FETCHING=y` on the dongle.
 
 ## Installation
 
 ### 1. Add the module to `west.yml`
-
-In your ZMK config repo, edit `config/west.yml`:
 
 ```yaml
 manifest:
@@ -32,38 +33,62 @@ manifest:
     path: config
 ```
 
-### 2. Enable the module in your dongle shield's `.conf`
+### 2. Enable on every device
 
-In your dongle shield's configuration (e.g. `config/boards/shields/<dongle>/<dongle>.conf`):
+In a config that applies to all targets (e.g. `config/<keyboard>.conf`):
 
 ```
-CONFIG_ZMK_BATTERY_MONITOR_HID=y
-CONFIG_USB_HID_DEVICE_COUNT=2
+CONFIG_ZMK_BATTERY_MONITOR=y
 ```
 
-`CONFIG_USB_HID_DEVICE_COUNT=2` is set as a default by this module, but listing it explicitly is harmless and makes the dependency visible.
+The module auto-selects `_HID` on the central and `_PERIPHERAL` on the halves based on `CONFIG_ZMK_SPLIT_ROLE_CENTRAL`. You do not need to set these manually.
 
-### 3. Build, flash, install the companion app
+### 3. Label each half (optional but recommended)
 
-- Commit and push your config. GitHub Actions builds the firmware.
-- Flash the updated dongle firmware.
-- Install [zmk-battery-monitor](https://github.com/undergroundpost/zmk-battery-monitor) on macOS.
+Create a per-shield override file in your config directory and set the side label. For a Corne:
 
-## Report format
+`config/corne_left.conf`:
+```
+CONFIG_ZMK_BATTERY_MONITOR_SIDE_LABEL="Corne Left"
+```
 
-A single vendor-defined HID input report on a secondary HID interface:
+`config/corne_right.conf`:
+```
+CONFIG_ZMK_BATTERY_MONITOR_SIDE_LABEL="Corne Right"
+```
 
-- **Report ID**: `0x01`
-- **Usage Page**: `0xFF00` (vendor-defined)
-- **Payload**: one byte per peripheral, state-of-charge `0-100`, or `0xFF` if the dongle has not yet received a reading for that peripheral.
+If you omit the label, the app shows "Peripheral 0" / "Peripheral 1" instead.
 
-For a 2-peripheral split, the full input report including ID is 3 bytes: `[0x01, left_pct, right_pct]`.
+### 4. Build, flash, install the companion app
+
+- Commit and push your config. GitHub Actions builds all firmware targets.
+- Flash the dongle **and** both halves with the updated firmware.
+- Install [zmk-battery-monitor](https://github.com/undergroundpost/zmk-battery-monitor).
 
 ## Options
 
 | Kconfig | Default | Description |
 | ------- | ------- | ----------- |
-| `CONFIG_ZMK_BATTERY_MONITOR_HID_HEARTBEAT_SEC` | `60` | How often to resend the current report as a liveness signal. Does not touch BLE, does not prevent peripheral sleep. |
+| `CONFIG_ZMK_BATTERY_MONITOR` | `n` | Master switch. Enable on every device. |
+| `CONFIG_ZMK_BATTERY_MONITOR_HID` | auto | Central USB HID reporting. Auto-selected on the central. |
+| `CONFIG_ZMK_BATTERY_MONITOR_PERIPHERAL` | auto | Peripheral BLE metadata service. Auto-selected on peripherals. |
+| `CONFIG_ZMK_BATTERY_MONITOR_SIDE_LABEL` | `""` | Per-half name; set in each half's shield override `.conf`. |
+| `CONFIG_ZMK_BATTERY_MONITOR_HID_HEARTBEAT_SEC` | `60` | How often the central resends the HID report as a liveness signal. USB-only, does not affect BLE or peripheral sleep. |
+
+## Report format
+
+**Report ID 1 (battery levels, frequent):**
+
+- Usage Page: `0xFF00`, Usage `0x01`, Report ID `0x01`
+- Payload: one byte per peripheral, `0-100` = state-of-charge, `0xFF` = no data yet.
+
+For a 2-peripheral split: `[0x01, left_pct, right_pct]` (3 bytes total).
+
+**Report ID 2 (metadata, sparse) — coming in Phase B.** Carries per-peripheral side label, charging flag, and reserved voltage field.
+
+## Compatibility
+
+If you enable the module only on the central and not on the halves, the app still works — you'll just see generic "Peripheral N" names and no charging/voltage data. The halves remain stock ZMK.
 
 ## License
 
