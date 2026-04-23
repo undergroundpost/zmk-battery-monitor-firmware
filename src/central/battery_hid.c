@@ -17,25 +17,44 @@
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
 
-LOG_MODULE_REGISTER(zmk_battery_monitor_hid, CONFIG_ZMK_BATTERY_MONITOR_HID_LOG_LEVEL);
+#include "protocol.h"
+#include "metadata.h"
+
+LOG_MODULE_REGISTER(zmk_battery_monitor_hid, CONFIG_ZMK_BATTERY_MONITOR_LOG_LEVEL);
 
 #define PERIPHERAL_COUNT CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS
-#define REPORT_ID        0x01
 #define PERCENT_UNKNOWN  0xFF
-#define REPORT_LEN       (1 + PERIPHERAL_COUNT)
 
+#define BATT_REPORT_LEN  (1 + PERIPHERAL_COUNT)
+#define META_REPORT_LEN  (1 + ZMK_BM_METADATA_REPORT_SIZE)
+
+/*
+ * HID descriptor: one Application Collection carrying two distinct reports.
+ *   Report ID 1: battery levels (1 byte per peripheral)
+ *   Report ID 2: metadata (32 bytes fixed, first byte is peripheral index)
+ */
 static const uint8_t hid_report_desc[] = {
-    0x06, 0x00, 0xFF,       // Usage Page (Vendor Defined 0xFF00)
-    0x09, 0x01,             // Usage (Vendor 0x01)
-    0xA1, 0x01,             // Collection (Application)
-    0x85, REPORT_ID,        //   Report ID (1)
-    0x09, 0x02,             //   Usage (Vendor 0x02)
-    0x15, 0x00,             //   Logical Minimum (0)
-    0x26, 0xFF, 0x00,       //   Logical Maximum (255)
-    0x75, 0x08,             //   Report Size (8 bits)
-    0x95, PERIPHERAL_COUNT, //   Report Count (per-peripheral bytes)
-    0x81, 0x02,             //   Input (Data, Variable, Absolute)
-    0xC0,                   // End Collection
+    0x06, 0x00, 0xFF,       /* Usage Page (Vendor 0xFF00) */
+    0x09, 0x01,             /* Usage (0x01) */
+    0xA1, 0x01,             /* Collection (Application) */
+
+    /* Report 1: battery levels */
+    0x85, ZMK_BM_BATTERY_REPORT_ID,
+    0x09, 0x02,             /*   Usage (0x02) */
+    0x15, 0x00,             /*   Logical Min 0 */
+    0x26, 0xFF, 0x00,       /*   Logical Max 255 */
+    0x75, 0x08,             /*   Report Size 8 */
+    0x95, PERIPHERAL_COUNT, /*   Report Count (N peripherals) */
+    0x81, 0x02,             /*   Input (Data, Var, Abs) */
+
+    /* Report 2: metadata */
+    0x85, ZMK_BM_METADATA_REPORT_ID,
+    0x09, 0x03,             /*   Usage (0x03) */
+    0x75, 0x08,             /*   Report Size 8 */
+    0x95, ZMK_BM_METADATA_REPORT_SIZE,
+    0x81, 0x02,             /*   Input (Data, Var, Abs) */
+
+    0xC0,                   /* End Collection */
 };
 
 static uint8_t peripheral_percent[PERIPHERAL_COUNT];
@@ -51,22 +70,14 @@ static const struct hid_ops ops = {
     .int_in_ready = in_ready_cb,
 };
 
-static int push_report(void) {
+static int write_report(const uint8_t *buf, size_t len) {
     if (hid_dev == NULL) {
         return -ENODEV;
     }
 
-    uint8_t report[REPORT_LEN];
-    report[0] = REPORT_ID;
-    for (int i = 0; i < PERIPHERAL_COUNT; i++) {
-        report[1 + i] = peripheral_percent[i];
-    }
-
     switch (zmk_usb_get_status()) {
     case USB_DC_SUSPEND:
-        // Host is asleep. Do not transmit — a report here (or a USB remote
-        // wakeup) would wake the host. The next heartbeat after resume will
-        // carry the current state.
+        /* Host asleep. Do not transmit — we do not want to wake the host. */
         return 0;
     case USB_DC_ERROR:
     case USB_DC_RESET:
@@ -79,7 +90,7 @@ static int push_report(void) {
             LOG_DBG("sem take failed: %d", ret);
             return ret;
         }
-        int err = hid_int_ep_write(hid_dev, report, sizeof(report), NULL);
+        int err = hid_int_ep_write(hid_dev, buf, len, NULL);
         if (err) {
             k_sem_give(&hid_sem);
             LOG_DBG("hid_int_ep_write failed: %d", err);
@@ -87,6 +98,50 @@ static int push_report(void) {
         return err;
     }
     }
+}
+
+static int push_battery_report(void) {
+    uint8_t report[BATT_REPORT_LEN];
+    report[0] = ZMK_BM_BATTERY_REPORT_ID;
+    for (int i = 0; i < PERIPHERAL_COUNT; i++) {
+        report[1 + i] = peripheral_percent[i];
+    }
+    return write_report(report, sizeof(report));
+}
+
+static int push_metadata_report(int slot) {
+    if (slot < 0 || slot >= PERIPHERAL_COUNT) {
+        return -EINVAL;
+    }
+    const struct peripheral_metadata *meta = zmk_bm_get_peripheral_metadata(slot);
+    if (!meta) {
+        return -ENODEV;
+    }
+
+    uint8_t report[META_REPORT_LEN];
+    memset(report, 0, sizeof(report));
+    report[0] = ZMK_BM_METADATA_REPORT_ID;
+    report[1] = (uint8_t)slot;
+
+    uint8_t flags = 0;
+    if (meta->charging) flags |= ZMK_BM_METADATA_FLAG_CHARGING;
+    if (meta->voltage_valid) flags |= ZMK_BM_METADATA_FLAG_VOLTAGE_VALID;
+    report[2] = flags;
+
+    report[3] = (uint8_t)(meta->voltage_mv & 0xFF);
+    report[4] = (uint8_t)((meta->voltage_mv >> 8) & 0xFF);
+
+    if (meta->has_label) {
+        size_t copy = strnlen(meta->label, ZMK_BM_METADATA_LABEL_MAX - 1);
+        memcpy(&report[1 + ZMK_BM_METADATA_LABEL_OFFSET], meta->label, copy);
+    }
+    /* Remainder already zeroed. */
+
+    return write_report(report, sizeof(report));
+}
+
+void zmk_bm_metadata_changed(int slot) {
+    push_metadata_report(slot);
 }
 
 static int battery_listener_cb(const zmk_event_t *eh) {
@@ -98,7 +153,7 @@ static int battery_listener_cb(const zmk_event_t *eh) {
 
     if (ev->source < PERIPHERAL_COUNT) {
         peripheral_percent[ev->source] = ev->state_of_charge;
-        push_report();
+        push_battery_report();
     }
     return ZMK_EV_EVENT_BUBBLE;
 }
@@ -107,7 +162,15 @@ ZMK_LISTENER(zmk_battery_monitor_hid, battery_listener_cb);
 ZMK_SUBSCRIPTION(zmk_battery_monitor_hid, zmk_peripheral_battery_state_changed);
 
 static void heartbeat_handler(struct k_work *work) {
-    push_report();
+    push_battery_report();
+    /* Opportunistically resend metadata we know about. Safe because
+     * Report 2 is idempotent and labels rarely change. */
+    for (int i = 0; i < PERIPHERAL_COUNT; i++) {
+        const struct peripheral_metadata *meta = zmk_bm_get_peripheral_metadata(i);
+        if (meta && meta->has_label) {
+            push_metadata_report(i);
+        }
+    }
     k_work_reschedule(&heartbeat_work,
                       K_SECONDS(CONFIG_ZMK_BATTERY_MONITOR_HID_HEARTBEAT_SEC));
 }
