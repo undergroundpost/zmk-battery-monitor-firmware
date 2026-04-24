@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026 The zmk-battery-monitor-firmware Contributors
+ * Copyright (c) 2026 The kibodo-firmware Contributors
  *
  * SPDX-License-Identifier: MIT
  */
@@ -17,7 +17,7 @@
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
 
-#if IS_ENABLED(CONFIG_ZMK_BATTERY_MONITOR_LAYER)
+#if IS_ENABLED(CONFIG_KIBODO_LAYER)
 #include <zmk/keymap.h>
 #include <zmk/events/layer_state_changed.h>
 #endif
@@ -25,15 +25,15 @@
 #include "protocol.h"
 #include "metadata.h"
 
-LOG_MODULE_REGISTER(zmk_battery_monitor_hid, CONFIG_ZMK_BATTERY_MONITOR_LOG_LEVEL);
+LOG_MODULE_REGISTER(kibodo_hid, CONFIG_KIBODO_LOG_LEVEL);
 
 #define PERIPHERAL_COUNT CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS
 #define PERCENT_UNKNOWN  0xFF
 
 #define BATT_REPORT_LEN       (1 + PERIPHERAL_COUNT)
-#define META_REPORT_LEN       (1 + ZMK_BM_METADATA_REPORT_SIZE)
+#define META_REPORT_LEN       (1 + KIBODO_METADATA_REPORT_SIZE)
 #define LAYER_REPORT_LEN      (1 + 1)
-#define LAYER_NAME_REPORT_LEN (1 + ZMK_BM_LAYER_NAME_REPORT_SIZE)
+#define LAYER_NAME_REPORT_LEN (1 + KIBODO_LAYER_NAME_REPORT_SIZE)
 
 /*
  * HID descriptor: one Application Collection carrying up to four reports.
@@ -48,7 +48,7 @@ static const uint8_t hid_report_desc[] = {
     0xA1, 0x01,             /* Collection (Application) */
 
     /* Report 1: battery levels */
-    0x85, ZMK_BM_BATTERY_REPORT_ID,
+    0x85, KIBODO_BATTERY_REPORT_ID,
     0x09, 0x02,             /*   Usage (0x02) */
     0x15, 0x00,             /*   Logical Min 0 */
     0x26, 0xFF, 0x00,       /*   Logical Max 255 */
@@ -57,25 +57,25 @@ static const uint8_t hid_report_desc[] = {
     0x81, 0x02,             /*   Input (Data, Var, Abs) */
 
     /* Report 2: peripheral metadata */
-    0x85, ZMK_BM_METADATA_REPORT_ID,
+    0x85, KIBODO_METADATA_REPORT_ID,
     0x09, 0x03,             /*   Usage (0x03) */
     0x75, 0x08,             /*   Report Size 8 */
-    0x95, ZMK_BM_METADATA_REPORT_SIZE,
+    0x95, KIBODO_METADATA_REPORT_SIZE,
     0x81, 0x02,             /*   Input (Data, Var, Abs) */
 
-#if IS_ENABLED(CONFIG_ZMK_BATTERY_MONITOR_LAYER)
+#if IS_ENABLED(CONFIG_KIBODO_LAYER)
     /* Report 3: active layer */
-    0x85, ZMK_BM_LAYER_REPORT_ID,
+    0x85, KIBODO_LAYER_REPORT_ID,
     0x09, 0x04,             /*   Usage (0x04) */
     0x75, 0x08,             /*   Report Size 8 */
     0x95, 0x01,             /*   Report Count 1 */
     0x81, 0x02,             /*   Input (Data, Var, Abs) */
 
     /* Report 4: layer metadata */
-    0x85, ZMK_BM_LAYER_NAME_REPORT_ID,
+    0x85, KIBODO_LAYER_NAME_REPORT_ID,
     0x09, 0x05,             /*   Usage (0x05) */
     0x75, 0x08,             /*   Report Size 8 */
-    0x95, ZMK_BM_LAYER_NAME_REPORT_SIZE,
+    0x95, KIBODO_LAYER_NAME_REPORT_SIZE,
     0x81, 0x02,             /*   Input (Data, Var, Abs) */
 #endif
 
@@ -127,7 +127,7 @@ static int write_report(const uint8_t *buf, size_t len) {
 
 static int push_battery_report(void) {
     uint8_t report[BATT_REPORT_LEN];
-    report[0] = ZMK_BM_BATTERY_REPORT_ID;
+    report[0] = KIBODO_BATTERY_REPORT_ID;
     for (int i = 0; i < PERIPHERAL_COUNT; i++) {
         report[1 + i] = peripheral_percent[i];
     }
@@ -138,24 +138,24 @@ static int push_metadata_report(int slot) {
     if (slot < 0 || slot >= PERIPHERAL_COUNT) {
         return -EINVAL;
     }
-    const struct peripheral_metadata *meta = zmk_bm_get_peripheral_metadata(slot);
+    const struct peripheral_metadata *meta = kibodo_get_peripheral_metadata(slot);
     if (!meta || !meta->has_label) {
         return -ENODEV;
     }
 
     uint8_t report[META_REPORT_LEN];
     memset(report, 0, sizeof(report));
-    report[0] = ZMK_BM_METADATA_REPORT_ID;
+    report[0] = KIBODO_METADATA_REPORT_ID;
     report[1] = (uint8_t)slot;
 
-    size_t copy = strnlen(meta->label, ZMK_BM_METADATA_LABEL_MAX - 1);
-    memcpy(&report[1 + ZMK_BM_METADATA_LABEL_OFFSET], meta->label, copy);
+    size_t copy = strnlen(meta->label, KIBODO_METADATA_LABEL_MAX - 1);
+    memcpy(&report[1 + KIBODO_METADATA_LABEL_OFFSET], meta->label, copy);
     /* Remainder already zeroed. */
 
     return write_report(report, sizeof(report));
 }
 
-void zmk_bm_metadata_changed(int slot) {
+void kibodo_metadata_changed(int slot) {
     push_metadata_report(slot);
 }
 
@@ -173,10 +173,10 @@ static int battery_listener_cb(const zmk_event_t *eh) {
     return ZMK_EV_EVENT_BUBBLE;
 }
 
-ZMK_LISTENER(zmk_battery_monitor_hid, battery_listener_cb);
-ZMK_SUBSCRIPTION(zmk_battery_monitor_hid, zmk_peripheral_battery_state_changed);
+ZMK_LISTENER(kibodo_hid, battery_listener_cb);
+ZMK_SUBSCRIPTION(kibodo_hid, zmk_peripheral_battery_state_changed);
 
-#if IS_ENABLED(CONFIG_ZMK_BATTERY_MONITOR_LAYER)
+#if IS_ENABLED(CONFIG_KIBODO_LAYER)
 
 /* LAYER_UNSENT forces the first push after init regardless of current state. */
 #define LAYER_UNSENT 0xFF
@@ -184,7 +184,7 @@ static uint8_t last_sent_layer = LAYER_UNSENT;
 
 static int push_layer_report(void) {
     uint8_t idx = zmk_keymap_highest_layer_active();
-    uint8_t report[LAYER_REPORT_LEN] = {ZMK_BM_LAYER_REPORT_ID, idx};
+    uint8_t report[LAYER_REPORT_LEN] = {KIBODO_LAYER_REPORT_ID, idx};
     int err = write_report(report, sizeof(report));
     if (err == 0) {
         last_sent_layer = idx;
@@ -199,10 +199,10 @@ static int push_layer_name_report(uint8_t layer) {
     }
     uint8_t report[LAYER_NAME_REPORT_LEN];
     memset(report, 0, sizeof(report));
-    report[0] = ZMK_BM_LAYER_NAME_REPORT_ID;
+    report[0] = KIBODO_LAYER_NAME_REPORT_ID;
     report[1] = layer;
-    size_t copy = strnlen(name, ZMK_BM_LAYER_NAME_MAX - 1);
-    memcpy(&report[1 + ZMK_BM_LAYER_NAME_OFFSET], name, copy);
+    size_t copy = strnlen(name, KIBODO_LAYER_NAME_MAX - 1);
+    memcpy(&report[1 + KIBODO_LAYER_NAME_OFFSET], name, copy);
     return write_report(report, sizeof(report));
 }
 
@@ -216,32 +216,32 @@ static int layer_listener_cb(const zmk_event_t *eh) {
     return ZMK_EV_EVENT_BUBBLE;
 }
 
-ZMK_LISTENER(zmk_battery_monitor_layer, layer_listener_cb);
-ZMK_SUBSCRIPTION(zmk_battery_monitor_layer, zmk_layer_state_changed);
+ZMK_LISTENER(kibodo_layer, layer_listener_cb);
+ZMK_SUBSCRIPTION(kibodo_layer, zmk_layer_state_changed);
 
-#endif /* CONFIG_ZMK_BATTERY_MONITOR_LAYER */
+#endif /* CONFIG_KIBODO_LAYER */
 
 static void heartbeat_handler(struct k_work *work) {
     push_battery_report();
     /* Opportunistically resend metadata we know about. Safe because
      * Report 2 is idempotent and labels rarely change. */
     for (int i = 0; i < PERIPHERAL_COUNT; i++) {
-        const struct peripheral_metadata *meta = zmk_bm_get_peripheral_metadata(i);
+        const struct peripheral_metadata *meta = kibodo_get_peripheral_metadata(i);
         if (meta && meta->has_label) {
             push_metadata_report(i);
         }
     }
-#if IS_ENABLED(CONFIG_ZMK_BATTERY_MONITOR_LAYER)
+#if IS_ENABLED(CONFIG_KIBODO_LAYER)
     push_layer_report();
     for (uint8_t i = 0; i < ZMK_KEYMAP_LAYERS_LEN; i++) {
         push_layer_name_report(i);
     }
 #endif
     k_work_reschedule(&heartbeat_work,
-                      K_SECONDS(CONFIG_ZMK_BATTERY_MONITOR_HID_HEARTBEAT_SEC));
+                      K_SECONDS(CONFIG_KIBODO_HID_HEARTBEAT_SEC));
 }
 
-static int zmk_battery_monitor_hid_init(void) {
+static int kibodo_hid_init(void) {
     for (int i = 0; i < PERIPHERAL_COUNT; i++) {
         peripheral_percent[i] = PERCENT_UNKNOWN;
     }
@@ -262,10 +262,10 @@ static int zmk_battery_monitor_hid_init(void) {
 
     k_work_init_delayable(&heartbeat_work, heartbeat_handler);
     k_work_reschedule(&heartbeat_work,
-                      K_SECONDS(CONFIG_ZMK_BATTERY_MONITOR_HID_HEARTBEAT_SEC));
+                      K_SECONDS(CONFIG_KIBODO_HID_HEARTBEAT_SEC));
 
     LOG_INF("Battery monitor HID initialized (%d peripherals)", PERIPHERAL_COUNT);
     return 0;
 }
 
-SYS_INIT(zmk_battery_monitor_hid_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+SYS_INIT(kibodo_hid_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);

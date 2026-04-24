@@ -1,11 +1,11 @@
 zephyr_library()
 
-zephyr_library_sources_ifdef(CONFIG_ZMK_BATTERY_MONITOR_HID
+zephyr_library_sources_ifdef(CONFIG_KIBODO_HID
     src/central/battery_hid.c
     src/central/metadata_client.c
 )
 
-zephyr_library_sources_ifdef(CONFIG_ZMK_BATTERY_MONITOR_PERIPHERAL
+zephyr_library_sources_ifdef(CONFIG_KIBODO_PERIPHERAL
     src/peripheral/metadata_service.c
 )
 

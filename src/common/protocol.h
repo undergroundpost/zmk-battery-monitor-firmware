@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026 The zmk-battery-monitor-firmware Contributors
+ * Copyright (c) 2026 The kibodo-firmware Contributors
  *
  * SPDX-License-Identifier: MIT
  */
@@ -13,14 +13,14 @@
  * side-label characteristic to populate per-peripheral metadata in the
  * HID Report ID 2.
  */
-#define ZMK_BM_SERVICE_UUID_VAL                                                                    \
+#define KIBODO_SERVICE_UUID_VAL                                                                    \
     BT_UUID_128_ENCODE(0x6d0e0001, 0x8b4e, 0x4e8a, 0x8e7d, 0x9a5e9b8c7d6e)
 
-#define ZMK_BM_SIDE_LABEL_UUID_VAL                                                                 \
+#define KIBODO_SIDE_LABEL_UUID_VAL                                                                 \
     BT_UUID_128_ENCODE(0x6d0e0002, 0x8b4e, 0x4e8a, 0x8e7d, 0x9a5e9b8c7d6e)
 
-#define ZMK_BM_SERVICE_UUID    BT_UUID_DECLARE_128(ZMK_BM_SERVICE_UUID_VAL)
-#define ZMK_BM_SIDE_LABEL_UUID BT_UUID_DECLARE_128(ZMK_BM_SIDE_LABEL_UUID_VAL)
+#define KIBODO_SERVICE_UUID    BT_UUID_DECLARE_128(KIBODO_SERVICE_UUID_VAL)
+#define KIBODO_SIDE_LABEL_UUID BT_UUID_DECLARE_128(KIBODO_SIDE_LABEL_UUID_VAL)
 
 /*
  * USB HID report layout.
@@ -39,15 +39,15 @@
  *   byte 0       layer index
  *   bytes 1..31  layer label, UTF-8, null-terminated, zero-padded
  */
-#define ZMK_BM_BATTERY_REPORT_ID       0x01
-#define ZMK_BM_METADATA_REPORT_ID      0x02
-#define ZMK_BM_LAYER_REPORT_ID         0x03
-#define ZMK_BM_LAYER_NAME_REPORT_ID    0x04
+#define KIBODO_BATTERY_REPORT_ID       0x01
+#define KIBODO_METADATA_REPORT_ID      0x02
+#define KIBODO_LAYER_REPORT_ID         0x03
+#define KIBODO_LAYER_NAME_REPORT_ID    0x04
 
-#define ZMK_BM_METADATA_REPORT_SIZE    32
-#define ZMK_BM_METADATA_LABEL_OFFSET   1
-#define ZMK_BM_METADATA_LABEL_MAX      31 /* includes null terminator */
+#define KIBODO_METADATA_REPORT_SIZE    32
+#define KIBODO_METADATA_LABEL_OFFSET   1
+#define KIBODO_METADATA_LABEL_MAX      31 /* includes null terminator */
 
-#define ZMK_BM_LAYER_NAME_REPORT_SIZE  32
-#define ZMK_BM_LAYER_NAME_OFFSET       1
-#define ZMK_BM_LAYER_NAME_MAX          31 /* includes null terminator */
+#define KIBODO_LAYER_NAME_REPORT_SIZE  32
+#define KIBODO_LAYER_NAME_OFFSET       1
+#define KIBODO_LAYER_NAME_MAX          31 /* includes null terminator */

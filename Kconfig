@@ -1,18 +1,18 @@
-menuconfig ZMK_BATTERY_MONITOR
-    bool "Pair with the zmk-battery-monitor companion app"
+menuconfig KIBODO
+    bool "Pair with the Kibodo companion app"
     depends on ZMK_SPLIT
     default n
     help
       Enables per-peripheral battery reporting and (optionally) metadata
       exchange between split peripherals and the USB-connected central.
-      Pairs with the zmk-battery-monitor macOS app.
+      Pairs with the Kibodo macOS app.
 
       Enable on every device in your split (central AND peripherals).
       Subfeatures auto-select based on the ZMK split role.
 
-if ZMK_BATTERY_MONITOR
+if KIBODO
 
-config ZMK_BATTERY_MONITOR_HID
+config KIBODO_HID
     bool "Expose battery HID report over USB (central)"
     depends on ZMK_SPLIT_ROLE_CENTRAL && ZMK_USB
     default y
@@ -21,7 +21,7 @@ config ZMK_BATTERY_MONITOR_HID
       carrying per-peripheral battery levels and (once enabled)
       per-peripheral metadata (side label, charging state).
 
-config ZMK_BATTERY_MONITOR_PERIPHERAL
+config KIBODO_PERIPHERAL
     bool "Expose per-half metadata via BLE (peripheral)"
     depends on !ZMK_SPLIT_ROLE_CENTRAL && BT
     default y
@@ -31,9 +31,9 @@ config ZMK_BATTERY_MONITOR_PERIPHERAL
       The central reads these to populate richer metadata in the HID
       report sent to the host.
 
-config ZMK_BATTERY_MONITOR_SIDE_LABEL
+config KIBODO_SIDE_LABEL
     string "Side label shown in the companion app"
-    depends on ZMK_BATTERY_MONITOR_PERIPHERAL
+    depends on KIBODO_PERIPHERAL
     default ""
     help
       Human-readable name for this half, e.g. "Corne Left" or
@@ -41,29 +41,29 @@ config ZMK_BATTERY_MONITOR_SIDE_LABEL
       Set this in the shield override .conf for each half
       (e.g. config/corne_left.conf, config/corne_right.conf).
 
-config ZMK_BATTERY_MONITOR_HID_HEARTBEAT_SEC
+config KIBODO_HID_HEARTBEAT_SEC
     int "Heartbeat interval for HID report (seconds)"
-    depends on ZMK_BATTERY_MONITOR_HID
+    depends on KIBODO_HID
     default 60
     help
       How often the central resends the current report as a liveness
       signal. Purely dongle→host USB traffic; does not touch BLE
       and does not prevent peripheral deep sleep.
 
-config ZMK_BATTERY_MONITOR_LAYER
+config KIBODO_LAYER
     bool "Report active layer over USB HID (central)"
-    depends on ZMK_BATTERY_MONITOR_HID
+    depends on KIBODO_HID
     default y
     help
       On the central dongle, includes the active-layer index and layer
       labels in the vendor HID report stream. Uses the same resolution
       as ZMK's on-dongle layer display (highest active layer).
 
-module = ZMK_BATTERY_MONITOR
-module-str = ZMK_BATTERY_MONITOR
+module = KIBODO
+module-str = KIBODO
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
 
-endif # ZMK_BATTERY_MONITOR
+endif # KIBODO
 
 config USB_HID_DEVICE_COUNT
-    default 2 if ZMK_BATTERY_MONITOR_HID
+    default 2 if KIBODO_HID
